@@ -3,11 +3,11 @@ package impl
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
-	pbcloudevents "github.com/cloudevents/sdk-go/binding/format/protobuf/v2"
-	cloudeventsModel "github.com/cloudevents/sdk-go/binding/format/protobuf/v2/internal/pb"
+	cepubsub "github.com/cloudevents/sdk-go/protocol/pubsub/v2"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 
 	"github.com/flyteorg/flyteadmin/pkg/workflowengine"
@@ -1252,30 +1252,48 @@ func (m *ExecutionManager) CreateWorkflowEvent(ctx context.Context, request admi
 
 func (m *ExecutionManager) publishCloudEvent(ctx context.Context, request admin.WorkflowExecutionEventRequest) {
 	event := cloudevents.NewEvent()
+	// CloudEvent specification: https://github.com/cloudevents/spec/blob/v1.0/spec.md#required-attributes
 	event.SetType("com.flyte.workflow")
-	event.SetSource("github.com/flyteadmin/pkg/manager/impl/execution_manager.go")
-	if err := event.SetData(pbcloudevents.ContentTypeProtobuf, request); err != nil {
+	event.SetSource("https://github.com/flyteorg/flyteadmin")
+
+	if err := event.SetData(cloudevents.ApplicationJSON, request); err != nil {
 		m.systemMetrics.UnexpectedDataError.Inc()
 		logger.Infof(ctx, "Failed to encode cloudEvent [%+v] with err: [%v]", request.RequestId, err)
 		return
 	}
-	eventProto := cloudeventsModel.CloudEvent{}
-	eventByte, err := pbcloudevents.Protobuf.Marshal(&event)
+
+	t, err := cepubsub.New(context.Background(),
+		cepubsub.WithProjectID("flyte-test-340607"),
+		cepubsub.WithTopicID("foo"))
 	if err != nil {
-		m.systemMetrics.UnexpectedDataError.Inc()
-		logger.Infof(ctx, "Failed to marshal cloudEvent [%+v] with err: [%v]", request.RequestId, err)
-		return
+		logger.Infof(ctx, "failed to create pubsub transport, %s", err.Error())
+		os.Exit(1)
 	}
-	if err := proto.Unmarshal(eventByte, &eventProto); err != nil {
-		m.systemMetrics.UnexpectedDataError.Inc()
-		logger.Infof(ctx, "Failed to unmarshal cloudEvent [%+v] with err: [%v]", request.RequestId, err)
-		return
+	c, err := cloudevents.NewClient(t, cloudevents.WithTimeNow(), cloudevents.WithUUIDs())
+	if err != nil {
+		logger.Infof(ctx, "failed to create client, %s", err.Error())
+		os.Exit(1)
 	}
 
-	if err := m.cloudEventPublisher.Publish(ctx, proto.MessageName(&eventProto), &eventProto); err != nil {
-		m.systemMetrics.PublishEventError.Inc()
-		logger.Infof(ctx, "error publishing cloudEvent [%+v] with err: [%v]", request.RequestId, err)
-	}
+	_ = c.Send(context.Background(), event)
+
+	//eventProto := cloudeventsModel.CloudEvent{}
+	//eventByte, err := pbcloudevents.Protobuf.Marshal(&event)
+	//if err != nil {
+	//	m.systemMetrics.UnexpectedDataError.Inc()
+	//	logger.Infof(ctx, "Failed to marshal cloudEvent [%+v] with err: [%v]", request.RequestId, err)
+	//	return
+	//}
+	//if err := proto.Unmarshal(eventByte, &eventProto); err != nil {
+	//	m.systemMetrics.UnexpectedDataError.Inc()
+	//	logger.Infof(ctx, "Failed to unmarshal cloudEvent [%+v] with err: [%v]", request.RequestId, err)
+	//	return
+	//}
+	//
+	//if err := m.cloudEventPublisher.Publish(ctx, proto.MessageName(&eventProto), &eventProto); err != nil {
+	//	m.systemMetrics.PublishEventError.Inc()
+	//	logger.Infof(ctx, "error publishing cloudEvent [%+v] with err: [%v]", request.RequestId, err)
+	//}
 }
 
 func (m *ExecutionManager) GetExecution(

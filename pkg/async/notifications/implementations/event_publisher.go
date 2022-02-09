@@ -103,3 +103,27 @@ func NewEventsPublisher(pub pubsub.Publisher, scope promutils.Scope, eventTypes 
 		events:        eventSet,
 	}
 }
+
+func NewCloudEventsPublisher(pub pubsub.Publisher, scope promutils.Scope, eventTypes []string) interfaces.Publisher {
+	eventSet := sets.NewString()
+
+	for _, event := range eventTypes {
+		if event == AllTypes || event == AllTypesShort {
+			for _, e := range supportedEvents {
+				eventSet = eventSet.Insert(e)
+			}
+			break
+		}
+		if e, found := supportedEvents[event]; found {
+			eventSet = eventSet.Insert(e)
+		} else {
+			logger.Errorf(context.Background(), "Unsupported event type [%s] in the config")
+		}
+	}
+
+	return &EventPublisher{
+		pub:           pub,
+		systemMetrics: newEventPublisherSystemMetrics(scope.NewSubScope("cloudevents_publisher")),
+		events:        eventSet,
+	}
+}
