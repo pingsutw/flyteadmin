@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	cepubsub "github.com/cloudevents/sdk-go/protocol/pubsub/v2"
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+
 	"github.com/flyteorg/flyteadmin/pkg/async"
 
 	"github.com/flyteorg/flyteadmin/pkg/async/notifications/implementations"
@@ -221,6 +224,36 @@ func NewEventsPublisher(config runtimeInterfaces.ExternalEventsConfig, scope pro
 			panic(err)
 		}
 		return implementations.NewEventsPublisher(publisher, scope, config.EventsPublisherConfig.EventTypes)
+	case common.Local:
+		fallthrough
+	default:
+		logger.Infof(context.Background(),
+			"Using default noop events publisher implementation for config type [%s]", config.Type)
+		return implementations.NewNoopPublish()
+	}
+}
+
+func NewCloudEventsPublisher(config runtimeInterfaces.CloudEventsConfig, scope promutils.Scope) interfaces.Publisher {
+	if !config.Enable {
+		return implementations.NewNoopPublish()
+	}
+	switch config.Type {
+	case common.AWS:
+		// CloudEvent sdk doesn't support to send event to aws pub/sub
+		return implementations.NewNoopPublish()
+	case common.GCP:
+		t, err := cepubsub.New(context.Background(),
+			cepubsub.WithProjectID(config.GCPConfig.ProjectID),
+			cepubsub.WithTopicID(config.EventsPublisherConfig.TopicName))
+		if err != nil {
+			panic(err)
+		}
+		client, err := cloudevents.NewClient(t, cloudevents.WithTimeNow(), cloudevents.WithUUIDs())
+		if err != nil {
+			panic(err)
+		}
+
+		return implementations.NewCloudEventsPublisher(client, scope, config.EventsPublisherConfig.EventTypes)
 	case common.Local:
 		fallthrough
 	default:

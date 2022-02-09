@@ -387,6 +387,17 @@ type ExternalEventsConfig struct {
 	ReconnectDelaySeconds int `json:"reconnectDelaySeconds"`
 }
 
+type CloudEventsConfig struct {
+	Enable bool `json:"enable"`
+	// Defines the cloud provider that backs the scheduler. In the absence of a specification the no-op, 'local'
+	// scheme is used.
+	Type      string    `json:"type"`
+	AWSConfig AWSConfig `json:"aws"`
+	GCPConfig GCPConfig `json:"gcp"`
+	// Publish events to a pubsub tops
+	EventsPublisherConfig EventsPublisherConfig `json:"eventsPublisher"`
+}
+
 // Configuration specific to notifications handling
 type NotificationsConfig struct {
 	// Defines the cloud provider that backs the scheduler. In the absence of a specification the no-op, 'local'
@@ -424,5 +435,5 @@ type ApplicationConfiguration interface {
 	GetNotificationsConfig() *NotificationsConfig
 	GetDomainsConfig() *DomainsConfig
 	GetExternalEventsConfig() *ExternalEventsConfig
-	GetCloudEventsConfig() *ExternalEventsConfig
+	GetCloudEventsConfig() *CloudEventsConfig
 }
